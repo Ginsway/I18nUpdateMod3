@@ -13,6 +13,10 @@ java {
     targetCompatibility = JavaVersion.VERSION_1_8
 }
 
+tasks.withType<JavaCompile> {
+    options.encoding = "UTF-8"
+}
+
 tasks.shadowJar {
     manifest {
         attributes(
@@ -43,18 +47,18 @@ configurations.configureEach {
 }
 
 dependencies {
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.0")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.0")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.3")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.3")
     implementation("net.runelite.archive-patcher:archive-patcher-applier:1.2")
-    compileOnly("org.jetbrains:annotations:24.0.1")
+    compileOnly("org.jetbrains:annotations:24.1.0")
 
-    implementation("net.fabricmc:fabric-loader:0.14.22")
+    implementation("net.fabricmc:fabric-loader:0.15.9")
     implementation("cpw.mods:modlauncher:8.1.3")
     implementation("net.minecraft:launchwrapper:1.12")
 
-    implementation("commons-io:commons-io:2.14.0")
-    implementation("org.ow2.asm:asm:9.6")
-    implementation("com.google.code.gson:gson:2.10.1")
+    implementation("commons-io:commons-io:2.16.1")
+    implementation("org.ow2.asm:asm:9.7")
+    implementation("com.google.code.gson:gson:2.11.0")
 
 }
 
@@ -80,7 +84,7 @@ modrinth {
     versionType.set("release")
     uploadFile.set(tasks["shadowJar"])
     gameVersions.set(supportMinecraftVersions)
-    loaders.set(listOf("fabric", "forge", "quilt"))
+    loaders.set(listOf("fabric", "forge", "neoforge", "quilt"))
     syncBodyFrom.set(rootProject.file("README.md").readText())
     changelog.set(System.getenv("CHANGE_LOG"))
 }

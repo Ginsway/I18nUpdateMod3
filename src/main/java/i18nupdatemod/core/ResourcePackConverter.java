@@ -2,6 +2,7 @@ package i18nupdatemod.core;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import i18nupdatemod.entity.GameMetaData;
 import i18nupdatemod.util.FileUtil;
 import i18nupdatemod.util.Log;
 import org.apache.commons.io.IOUtils;
@@ -32,11 +33,9 @@ public class ResourcePackConverter {
         this.tmpFilePath = FileUtil.getTemporaryPath(filename);
     }
 
-    public void convert(int packFormat, String description) throws Exception {
+    public void convert(GameMetaData metaData, String description, HashSet<String> modDomainsSet) throws Exception {
         Set<String> fileList = new HashSet<>();
-        try (ZipOutputStream zos = new ZipOutputStream(
-                Files.newOutputStream(tmpFilePath),
-                StandardCharsets.UTF_8)) {
+        try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(tmpFilePath), StandardCharsets.UTF_8)) {
 //            zos.setMethod(ZipOutputStream.STORED);
             for (Path p : sourcePath) {
                 Log.info("Converting: " + p);
@@ -44,20 +43,25 @@ public class ResourcePackConverter {
                     for (Enumeration<? extends ZipEntry> e = zf.entries(); e.hasMoreElements(); ) {
                         ZipEntry ze = e.nextElement();
                         String name = ze.getName();
+                        String[] parts = name.split("/");
+                        // 正在筛选的是assets/modDomain/** && 当前的modDomain不需要
+                        if (parts.length >= 2 && !modDomainsSet.contains(parts[1])) {
+                            continue;
+                        }
+
                         // Don't put same file
                         if (fileList.contains(name)) {
 //                            Log.debug(name + ": DUPLICATE");
                             continue;
                         }
                         fileList.add(name);
-//                        Log.debug(name);
 
                         // Put file into new zip
                         zos.putNextEntry(new ZipEntry(name));
                         InputStream is = zf.getInputStream(ze);
                         if (name.equalsIgnoreCase("pack.mcmeta")) {
                             //Convert pack.mcmeta
-                            zos.write(convertPackMeta(is, packFormat, description));
+                            zos.write(convertPackMeta(is, metaData, description));
                         } else {
                             //Copy other file
                             IOUtils.copy(is, zos);
@@ -68,15 +72,17 @@ public class ResourcePackConverter {
             }
             zos.close();
             Log.info("Converted: %s -> %s", sourcePath, tmpFilePath);
-            FileUtil.syncTmpFile(tmpFilePath, filePath, true);
+            FileUtil.syncTmpFile(tmpFilePath, filePath);
         } catch (Exception e) {
             throw new Exception(String.format("Error converting %s to %s: %s", sourcePath, tmpFilePath, e));
         }
     }
 
-    private byte[] convertPackMeta(InputStream is, int packFormat, String description) {
+    private byte[] convertPackMeta(InputStream is, GameMetaData metaData, String description) {
         PackMeta meta = GSON.fromJson(new InputStreamReader(is, StandardCharsets.UTF_8), PackMeta.class);
-        meta.pack.pack_format = packFormat;
+        meta.pack.pack_format = metaData.useNewFormat() ? null : metaData.packFormat;
+        meta.pack.min_format = metaData.useNewFormat() ? metaData.minFormat : null;
+        meta.pack.max_format = metaData.useNewFormat() ? metaData.maxFormat : null;
         meta.pack.description = description;
         return GSON.toJson(meta).getBytes(StandardCharsets.UTF_8);
     }
@@ -85,7 +91,9 @@ public class ResourcePackConverter {
         Pack pack;
 
         private static class Pack {
-            int pack_format;
+            Integer pack_format;  // 改为 Integer，支持 null
+            Integer min_format;
+            Integer max_format;
             String description;
         }
     }

@@ -12,7 +12,11 @@ import i18nupdatemod.util.VersionRange;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
+
+import static i18nupdatemod.util.AssetUtil.getFastestUrl;
+import static i18nupdatemod.util.AssetUtil.getGitIndex;
 
 public class I18nConfig {
     /**
@@ -43,7 +47,7 @@ public class I18nConfig {
         return i18nMetaData.games.stream().filter(it -> {
             VersionRange range = new VersionRange(it.gameVersions);
             return range.contains(version);
-        }).findFirst().orElseThrow(IllegalStateException::new);
+        }).findFirst().orElseThrow(() -> new IllegalStateException(String.format("Version %s not found in i18n meta", minecraftVersion)));
     }
 
     private static AssetMetaData getAssetMetaData(String minecraftVersion, String loader) {
@@ -58,17 +62,63 @@ public class I18nConfig {
         GameMetaData convert = getGameMetaData(minecraftVersion);
         GameAssetDetail ret = new GameAssetDetail();
 
-        ret.downloads = convert.convertFrom.stream().map(it->getAssetMetaData(it,loader)).map(it -> {
-            GameAssetDetail.AssetDownloadDetail adi = new GameAssetDetail.AssetDownloadDetail();
-            adi.fileName = it.filename;
-            adi.fileUrl = CFPA_ASSET_ROOT + it.filename;
-            adi.md5Url = CFPA_ASSET_ROOT + it.md5Filename;
-            adi.targetVersion = it.targetVersion;
-            return adi;
-        }).collect(Collectors.toList());
-        ret.covertPackFormat = convert.packFormat;
+        String assetRoot = getFastestUrl();
+        Log.debug("Using asset root: " + assetRoot);
+
+        if (assetRoot.equals("https://raw.githubusercontent.com/")) {
+            ret.downloads = createDownloadDetailsFromGit(convert, loader);
+        } else {
+            ret.downloads = createDownloadDetails(convert, loader, assetRoot);
+        }
+
         ret.covertFileName =
                 String.format("Minecraft-Mod-Language-Modpack-Converted-%s.zip", minecraftVersion);
         return ret;
+    }
+
+    public static GameMetaData getPackFormat(String minecraftVersion) {
+        return getGameMetaData(minecraftVersion);
+    }
+
+    private static List<GameAssetDetail.AssetDownloadDetail> createDownloadDetails(GameMetaData convert, String loader, String assetRoot) {
+        return convert.convertFrom.stream().map(it -> getAssetMetaData(it, loader)).map(it -> {
+            GameAssetDetail.AssetDownloadDetail adi = new GameAssetDetail.AssetDownloadDetail();
+            adi.fileName = it.filename;
+            adi.fileUrl = assetRoot + it.filename;
+            adi.md5Url = assetRoot + it.md5Filename;
+            adi.targetVersion = it.targetVersion;
+            return adi;
+        }).collect(Collectors.toList());
+    }
+
+    private static List<GameAssetDetail.AssetDownloadDetail> createDownloadDetailsFromGit(GameMetaData convert, String loader) {
+        try {
+            Map<String, String> index = getGitIndex();
+            String releaseTag;
+            String version = convert.convertFrom.get(0);
+
+            if (loader.toLowerCase().contains("fabric")) {
+                releaseTag = index.get(version + "-fabric");
+            } else {
+                releaseTag = index.get(version);
+            }
+            if (releaseTag == null) {
+                Log.debug("Error getting index: " + version + "-" + loader);
+                Log.debug(index.toString());
+                throw new Exception();
+            }
+            String assetRoot = "https://github.com/CFPAOrg/Minecraft-Mod-Language-Package/releases/download/" + releaseTag + "/";
+
+            return convert.convertFrom.stream().map(it -> getAssetMetaData(it, loader)).map(it -> {
+                GameAssetDetail.AssetDownloadDetail adi = new GameAssetDetail.AssetDownloadDetail();
+                adi.fileName = it.filename;
+                adi.fileUrl = assetRoot + it.filename;
+                adi.md5Url = assetRoot + it.md5Filename;
+                adi.targetVersion = it.targetVersion;
+                return adi;
+            }).collect(Collectors.toList());
+        } catch (Exception ignore) {
+            return createDownloadDetails(convert, loader, CFPA_ASSET_ROOT);
+        }
     }
 }
